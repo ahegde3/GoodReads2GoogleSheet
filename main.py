@@ -1,12 +1,15 @@
 import feedparser
 import json
 from dotenv import load_dotenv
+load_dotenv()
 import os
 import datetime
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
-load_dotenv()
+from services.classifier import classify_books
+
+
 
 # Constants
 RSS_URL = "https://www.goodreads.com/review/list_rss/70445162?key=qg0XmblgluNyknWOzUaB4y2ApKPhq64rhV6MNScwws7hKg3B&shelf=read"
@@ -63,17 +66,32 @@ def insert_data_into_sheet(sheetService, data):
 
     # Convert the data to a 2D list
     # Define headers
-    headers = ["Title", "Author", "Read At", "Rating"]
+    headers = ["Title", "Author", "Type","Read At", "Rating"]
     values = [headers]
+    book_name_list =[]
+
     for item in data:
 
         if item['user_read_at'] == "":
             read_at = ""
         else :
-            read_at = datetime.datetime.strptime(item['user_read_at'],"%a, %d %b %Y %H:%M:%S %z").strftime('%d/%B/%Y')    
-        values.append([item["title"], item['author_name'],read_at ,item['user_rating']])
+            read_at = datetime.datetime.strptime(item['user_read_at'],"%a, %d %b %Y %H:%M:%S %z").strftime('%d/%B/%Y') 
 
-  
+    
+        values.append([item["title"], item['author_name'],read_at ,item['user_rating']])
+        book_name_list.append(item["title"])
+   
+    # Classify the books
+    classification_book_type = classify_books(book_name_list)
+
+    for i in range(1,len(values)):
+        if  "non" in classification_book_type[i-1][1].lower():
+            values[i].insert(2,"Non-Fiction")
+        else :
+            values[i].insert(2,"Fiction")    
+
+
+ 
 
     # Update the Google Sheet
     request = sheetService.spreadsheets().values().update(
@@ -84,10 +102,7 @@ def insert_data_into_sheet(sheetService, data):
 
 
 if __name__ == "__main__":
-    
 
-   #Load environment variables from .env file
-    load_dotenv()
     sheetService = initialize_google_sheet() 
     data = fetch_rss_data()
 
